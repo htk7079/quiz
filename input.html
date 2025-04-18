@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>문제 입력 페이지</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .question-block {
+      border: 1px solid #ccc;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    .choice-item { margin: 8px 0; }
+    input[type="text"], textarea {
+      padding: 6px;
+      width: 90%;
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    textarea { height: 60px; resize: vertical; }
+    button { margin-top: 10px; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+<h1>문제 입력 페이지</h1>
+
+<label>새 유형 추가: <input type="text" id="new-type" placeholder="예: 자료구조" /></label>
+<button onclick="addType()">+ 유형 추가</button>
+<br><br>
+
+<label>유형 선택: 
+  <select id="type-select">
+    <option value="">유형을 선택하세요</option>
+  </select>
+</label>
+<br><br>
+
+<div id="questions-container"></div>
+<button onclick="addQuestion()">+ 문제 추가</button>
+<button onclick="saveToFirebase()">💾 저장하기</button>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, updateDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDeERFKLaqDrczzNiqsIPfGcUoaEchBz4o",
+    authDomain: "quiz-82fe2.firebaseapp.com",
+    projectId: "quiz-82fe2",
+    storageBucket: "quiz-82fe2.firebasestorage.app",
+    messagingSenderId: "74793318423",
+    appId: "1:74793318423:web:8ae9b229d41f0b4a080452"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  let questionCount = 0;
+
+  async function loadTypes() {
+    const select = document.getElementById('type-select');
+    select.innerHTML = '<option value="">유형을 선택하세요</option>';
+    const snapshot = await getDocs(collection(db, "questionTypes"));
+    snapshot.forEach(doc => {
+      const option = document.createElement("option");
+      option.value = doc.id;
+      option.textContent = doc.id;
+      select.appendChild(option);
+    });
+  }
+
+  window.addType = async function () {
+    const newType = document.getElementById('new-type').value.trim();
+    if (!newType) return alert("유형 이름을 입력하세요!");
+
+    const docRef = doc(db, "questionTypes", newType);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) return alert("이미 존재하는 유형입니다.");
+
+    await setDoc(docRef, { questions: [] });
+    alert("유형이 추가되었습니다.");
+    document.getElementById('new-type').value = "";
+    loadTypes();
+  };
+
+  window.addQuestion = function () {
+    const container = document.getElementById('questions-container');
+    const questionId = `question-${questionCount++}`;
+    const div = document.createElement('div');
+    div.className = 'question-block';
+    div.id = questionId;
+
+    let choicesHTML = '';
+    for (let i = 0; i < 4; i++) {
+      choicesHTML += `
+        <div class="choice-item">
+          <input type="checkbox" class="correct-checkbox" />
+          <input type="text" class="choice-text" placeholder="보기 입력" />
+          <button onclick="this.parentElement.remove()">❌</button>
+        </div>
+      `;
+    }
+
+    div.innerHTML = `
+      <label>문제: <br><textarea class="question-text" placeholder="문제를 입력하세요"></textarea></label><br>
+      <div class="choices-container">
+        ${choicesHTML}
+      </div>
+      <button onclick="addChoice('${questionId}')">+ 보기 추가</button><br><br>
+      <label>풀이/설명:<br><textarea class="explanation-text" placeholder="이 문제의 해설을 입력하세요"></textarea></label><br>
+      <button onclick="deleteQuestion('${questionId}')">🗑️ 문제 삭제</button>
+      <hr>
+    `;
+    container.appendChild(div);
+  };
+
+  window.addChoice = function (questionId) {
+    const container = document.querySelector(`#${questionId} .choices-container`);
+    const choiceDiv = document.createElement('div');
+    choiceDiv.className = 'choice-item';
+    choiceDiv.innerHTML = `
+      <input type="checkbox" class="correct-checkbox" />
+      <input type="text" class="choice-text" placeholder="보기 입력" />
+      <button onclick="this.parentElement.remove()">❌</button>
+    `;
+    container.appendChild(choiceDiv);
+  };
+
+  window.deleteQuestion = function (questionId) {
+    const block = document.getElementById(questionId);
+    if (block && confirm("정말 이 문제를 삭제할까요?")) {
+      block.remove();
+    }
+  };
+
+  window.saveToFirebase = async function () {
+    const selectedType = document.getElementById('type-select').value;
+    if (!selectedType) return alert("유형을 선택해주세요!");
+
+    const questions = [];
+    const questionBlocks = document.querySelectorAll('.question-block');
+
+    questionBlocks.forEach(block => {
+      const questionText = block.querySelector('.question-text').value.trim();
+      const explanation = block.querySelector('.explanation-text').value.trim();
+      const choiceElements = block.querySelectorAll('.choice-text');
+      const correctCheckboxes = block.querySelectorAll('.correct-checkbox');
+
+      const choices = [];
+      const correctAnswers = [];
+
+      choiceElements.forEach((choiceEl, idx) => {
+        const text = choiceEl.value.trim();
+        if (text) {
+          choices.push(text);
+          if (correctCheckboxes[idx].checked) {
+            correctAnswers.push(idx);
+          }
+        }
+      });
+
+      if (questionText && choices.length > 0) {
+        questions.push({ question: questionText, choices, correctAnswers, explanation });
+      }
+    });
+
+    if (questions.length === 0) {
+      alert("최소 1개의 문제를 입력해주세요.");
+      return;
+    }
+
+    const docRef = doc(db, "questionTypes", selectedType);
+    const existing = await getDoc(docRef);
+    const existingQuestions = existing.exists() ? existing.data().questions : [];
+    await updateDoc(docRef, { questions: [...existingQuestions, ...questions] });
+    alert("🔥 Firebase에 문제 추가 완료!");
+    document.getElementById('questions-container').innerHTML = '';
+  };
+
+  loadTypes();
+</script>
+</body>
+</html>

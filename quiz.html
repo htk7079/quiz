@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>퀴즈 풀기</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .question-block {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .choice-item { margin: 5px 0; }
+    .correct { background-color: #d4edda; }
+    .wrong { background-color: #f8d7da; }
+    .explanation { margin-top: 10px; font-size: 0.9em; color: #333; }
+    button { margin-top: 20px; padding: 10px 20px; }
+    #question-count { width: 60px; }
+    .question-type {
+      font-size: 0.8em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h2>퀴즈 풀기</h2>
+  <label>문제 유형 선택:
+    <div id="type-select-container"></div>
+  </label>
+  <label>문제 개수:
+    <input type="number" id="question-count" min="1" value="5">
+  </label>
+  <button onclick="loadQuiz()">문제 불러오기</button>
+
+  <form id="quiz-form"></form>
+  <button onclick="gradeQuiz()">채점하기</button>
+
+  <div id="score-result"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDeERFKLaqDrczzNiqsIPfGcUoaEchBz4o",
+      authDomain: "quiz-82fe2.firebaseapp.com",
+      projectId: "quiz-82fe2",
+      storageBucket: "quiz-82fe2.firebasestorage.app",
+      messagingSenderId: "74793318423",
+      appId: "1:74793318423:web:8ae9b229d41f0b4a080452"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const typeSelectContainer = document.getElementById("type-select-container");
+    const form = document.getElementById("quiz-form");
+    const scoreDiv = document.getElementById("score-result");
+    const questionCountInput = document.getElementById("question-count");
+
+    let quizData = [];
+    let questionTypes = [];
+
+    async function loadTypeList() {
+      const querySnapshot = await getDocs(collection(db, "questionTypes"));
+      querySnapshot.forEach(doc => {
+        const div = document.createElement("div");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = doc.id;
+        checkbox.id = `type-${doc.id}`;
+        const label = document.createElement("label");
+        label.setAttribute("for", `type-${doc.id}`);
+        label.textContent = `${doc.id}`;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        typeSelectContainer.appendChild(div);
+      });
+    }
+
+    loadTypeList();
+
+    window.loadQuiz = async function () {
+      const selectedTypes = Array.from(document.querySelectorAll("input[type='checkbox']:checked")).map(checkbox => checkbox.value);
+      const count = parseInt(questionCountInput.value);
+
+      if (selectedTypes.length === 0) return alert("문제 유형을 하나 이상 선택하세요!");
+      if (isNaN(count) || count < 1) return alert("문제 개수를 올바르게 입력하세요!");
+
+      let allQuestions = [];
+      questionTypes = selectedTypes;
+
+      // 선택된 모든 유형의 문제 가져오기
+      for (const type of selectedTypes) {
+        const docSnap = await getDoc(doc(db, "questionTypes", type));
+        if (!docSnap.exists()) continue;
+
+        allQuestions = allQuestions.concat(docSnap.data().questions.map(q => ({ ...q, type })));
+      }
+
+      shuffle(allQuestions); // 모든 문제를 섞기
+      let selectedQuestions = allQuestions.slice(0, count);
+
+      quizData = selectedQuestions.map(q => {
+        const indices = q.choices.map((_, i) => i);
+        shuffle(indices);
+
+        return {
+          question: q.question,
+          explanation: q.explanation || "",
+          choices: indices.map(i => q.choices[i]),
+          answerIndices: q.correctAnswers.map(i => indices.indexOf(i)),
+          type: q.type // 유형 추가
+        };
+      });
+
+      renderQuiz();
+    };
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function renderQuiz() {
+      form.innerHTML = "";
+      scoreDiv.innerHTML = "";
+
+      quizData.forEach((q, i) => {
+        const div = document.createElement("div");
+        div.className = "question-block";
+        div.innerHTML = `<p><strong>${i + 1}. ${q.question}</strong></p>`;
+        q.choices.forEach((choice, j) => {
+          div.innerHTML += `
+            <div class="choice-item">
+              <label>
+                <input type="checkbox" name="q${i}" value="${j}">
+                ${choice}
+              </label>
+            </div>
+          `;
+        });
+        form.appendChild(div);
+      });
+    }
+
+    window.gradeQuiz = function () {
+      let correctCount = 0;
+
+      quizData.forEach((q, i) => {
+        const selected = [...form.querySelectorAll(`input[name="q${i}"]:checked`)].map(input => parseInt(input.value));
+        const block = form.children[i];
+
+        const isCorrect = arraysEqual(selected.sort(), q.answerIndices.sort());
+        if (isCorrect) {
+          correctCount++;
+          block.classList.add("correct");
+        } else {
+          block.classList.add("wrong");
+
+          const correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
+          const explanation = `
+            <div class="explanation">
+              <strong>✅ 정답:</strong> ${correctText}<br>
+              <strong>🧠 해설:</strong> ${q.explanation}
+            </div>
+          `;
+          block.insertAdjacentHTML("beforeend", explanation);
+        }
+
+        // 문제 옆에 유형 표시 (채점 후에만 표시)
+        const typeText = `<p class="question-type">유형: ${q.type}</p>`;
+        block.insertAdjacentHTML("beforeend", typeText);
+
+        block.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = true);
+      });
+
+      const total = quizData.length;
+      scoreDiv.innerHTML = `<h3>📊 점수: ${correctCount} / ${total} (${Math.round((correctCount / total) * 100)}%)</h3>`;
+    };
+
+    function arraysEqual(a, b) {
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+  </script>
+</body>
+</html>
