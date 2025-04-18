@@ -81,6 +81,7 @@
 
       let allQuestions = [];
 
+      // 선택된 유형별로 문제들을 가져와서 allQuestions에 추가
       for (const type of selectedTypes) {
         const docSnap = await getDoc(doc(db, "questionTypes", type));
         if (docSnap.exists()) {
@@ -91,8 +92,10 @@
         }
       }
 
+      // 문제들을 섞는다
       shuffle(allQuestions);
 
+      // 문제의 개수만큼 랜덤으로 가져오기
       const selectedQuestions = allQuestions.slice(0, count);
 
       quizData = selectedQuestions.map(q => {
