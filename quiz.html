@@ -156,7 +156,7 @@
           block.classList.add("wrong");
 
           const correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
-          const explanationText = q.explanation.replace(/\n/g, "<br>");
+          const explanationText = q.explanation.replace(/(?:\r\n|\r|\n)/g, "<br>");
           const explanation = `
             <div class="explanation">
               <strong>✅ 정답:</strong> ${correctText}<br>
