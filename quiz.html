@@ -125,8 +125,7 @@
       quizData.forEach((q, i) => {
         const div = document.createElement("div");
         div.className = "question-block";
-        div.innerHTML = `<p><strong>${i + 1}. ${q.question}</strong></p>
-                         <div class="question-meta">[유형: ${q.type}]</div>`;
+        div.innerHTML = `<p><strong>${i + 1}. ${q.question}</strong></p>`;
         q.choices.forEach((choice, j) => {
           div.innerHTML += `
             <div class="choice-item">
@@ -157,7 +156,7 @@
 
           const correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
           const explanationText = q.explanation.replace(/(?:\r\n|\r|\n)/g, "<br>");
-          const explanation = `
+          const explanation = ` 
             <div class="explanation">
               <strong>✅ 정답:</strong> ${correctText}<br>
               <strong>🧠 해설:</strong><br>${explanationText}
