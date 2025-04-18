@@ -15,18 +15,15 @@
     .correct { background-color: #d4edda; }
     .wrong { background-color: #f8d7da; }
     .explanation { margin-top: 10px; font-size: 0.9em; color: #333; }
+    .question-meta { font-size: 0.8em; color: gray; margin-top: 4px; }
     button { margin-top: 20px; padding: 10px 20px; }
     #question-count { width: 60px; }
-    .question-type {
-      font-size: 0.8em;
-      color: #555;
-    }
   </style>
 </head>
 <body>
   <h2>퀴즈 풀기</h2>
   <label>문제 유형 선택:
-    <div id="type-select-container"></div>
+    <select id="type-select" multiple size="5" style="width: 200px;"></select>
   </label>
   <label>문제 개수:
     <input type="number" id="question-count" min="1" value="5">
@@ -54,54 +51,49 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const typeSelectContainer = document.getElementById("type-select-container");
+    const typeSelect = document.getElementById("type-select");
     const form = document.getElementById("quiz-form");
     const scoreDiv = document.getElementById("score-result");
     const questionCountInput = document.getElementById("question-count");
 
     let quizData = [];
-    let questionTypes = [];
 
     async function loadTypeList() {
       const querySnapshot = await getDocs(collection(db, "questionTypes"));
-      querySnapshot.forEach(doc => {
-        const div = document.createElement("div");
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = doc.id;
-        checkbox.id = `type-${doc.id}`;
-        const label = document.createElement("label");
-        label.setAttribute("for", `type-${doc.id}`);
-        label.textContent = `${doc.id}`;
-
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        typeSelectContainer.appendChild(div);
-      });
+      for (const docSnap of querySnapshot.docs) {
+        const data = docSnap.data();
+        const option = document.createElement("option");
+        option.value = docSnap.id;
+        option.textContent = `${docSnap.id} (${data.questions?.length || 0}문제)`;
+        typeSelect.appendChild(option);
+      }
     }
 
     loadTypeList();
 
     window.loadQuiz = async function () {
-      const selectedTypes = Array.from(document.querySelectorAll("input[type='checkbox']:checked")).map(checkbox => checkbox.value);
+      const selectedOptions = [...typeSelect.selectedOptions];
+      const selectedTypes = selectedOptions.map(opt => opt.value);
       const count = parseInt(questionCountInput.value);
 
-      if (selectedTypes.length === 0) return alert("문제 유형을 하나 이상 선택하세요!");
+      if (selectedTypes.length === 0) return alert("유형을 선택하세요!");
       if (isNaN(count) || count < 1) return alert("문제 개수를 올바르게 입력하세요!");
 
       let allQuestions = [];
-      questionTypes = selectedTypes;
 
-      // 선택된 모든 유형의 문제 가져오기
       for (const type of selectedTypes) {
         const docSnap = await getDoc(doc(db, "questionTypes", type));
-        if (!docSnap.exists()) continue;
-
-        allQuestions = allQuestions.concat(docSnap.data().questions.map(q => ({ ...q, type })));
+        if (docSnap.exists()) {
+          const questions = docSnap.data().questions || [];
+          questions.forEach(q => {
+            allQuestions.push({ ...q, __type: type });
+          });
+        }
       }
 
-      shuffle(allQuestions); // 모든 문제를 섞기
-      let selectedQuestions = allQuestions.slice(0, count);
+      shuffle(allQuestions);
+
+      const selectedQuestions = allQuestions.slice(0, count);
 
       quizData = selectedQuestions.map(q => {
         const indices = q.choices.map((_, i) => i);
@@ -112,7 +104,7 @@
           explanation: q.explanation || "",
           choices: indices.map(i => q.choices[i]),
           answerIndices: q.correctAnswers.map(i => indices.indexOf(i)),
-          type: q.type // 유형 추가
+          type: q.__type
         };
       });
 
@@ -133,7 +125,8 @@
       quizData.forEach((q, i) => {
         const div = document.createElement("div");
         div.className = "question-block";
-        div.innerHTML = `<p><strong>${i + 1}. ${q.question}</strong></p>`;
+        div.innerHTML = `<p><strong>${i + 1}. ${q.question}</strong></p>
+                         <div class="question-meta">[유형: ${q.type}]</div>`;
         q.choices.forEach((choice, j) => {
           div.innerHTML += `
             <div class="choice-item">
@@ -163,18 +156,16 @@
           block.classList.add("wrong");
 
           const correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
+          const explanationText = q.explanation.replace(/\n/g, "<br>");
           const explanation = `
             <div class="explanation">
               <strong>✅ 정답:</strong> ${correctText}<br>
-              <strong>🧠 해설:</strong> ${q.explanation}
+              <strong>🧠 해설:</strong><br>${explanationText}
+              <div class="question-meta">[유형: ${q.type}]</div>
             </div>
           `;
           block.insertAdjacentHTML("beforeend", explanation);
         }
-
-        // 문제 옆에 유형 표시 (채점 후에만 표시)
-        const typeText = `<p class="question-type">유형: ${q.type}</p>`;
-        block.insertAdjacentHTML("beforeend", typeText);
 
         block.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = true);
       });
