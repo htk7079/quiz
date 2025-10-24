@@ -79,17 +79,79 @@
           const div = document.createElement("div");
           div.className = "question-block";
           div.dataset.index = i;
-          div.innerHTML = `
-            <label>문제:<br><textarea class="question-text">${q.question}</textarea></label><br>
-            ${q.choices.map((choice, idx) => `
+          
+          let questionType = q.type || 'multiple'; // 기본값은 객관식
+          let choicesHTML = '';
+          let shortAnswerHTML = '';
+          let oxAnswerHTML = '';
+
+          if (questionType === 'multiple') {
+            choicesHTML = q.choices.map((choice, idx) => `
               <div class="choice-item">
                 <input type="checkbox" class="correct-checkbox" ${q.correctAnswers.includes(idx) ? "checked" : ""}>
                 <input type="text" class="choice-text" value="${choice}">
               </div>
-            `).join('')}
+            `).join('');
+          } else if (questionType === 'short') {
+            shortAnswerHTML = `
+              <div class="short-answer-container">
+                <label>정답: <input type="text" class="short-answer" value="${q.answer || ''}" /></label><br><br>
+              </div>
+            `;
+          } else if (questionType === 'ox') {
+            oxAnswerHTML = `
+              <div class="ox-answer-container">
+                <label>정답:
+                  <select class="ox-answer">
+                    <option value="">선택하세요</option>
+                    <option value="O" ${q.answer === 'O' ? 'selected' : ''}>O (맞음)</option>
+                    <option value="X" ${q.answer === 'X' ? 'selected' : ''}>X (틀림)</option>
+                  </select>
+                </label><br><br>
+              </div>
+            `;
+          }
+
+          div.innerHTML = `
+            <label>문제 유형:
+              <select class="question-type">
+                <option value="multiple" ${questionType === 'multiple' ? 'selected' : ''}>객관식</option>
+                <option value="short" ${questionType === 'short' ? 'selected' : ''}>단답형</option>
+                <option value="ox" ${questionType === 'ox' ? 'selected' : ''}>O/X</option>
+              </select>
+            </label><br><br>
+            <label>문제:<br><textarea class="question-text">${q.question}</textarea></label><br>
+            <div class="choices-container" style="display: ${questionType === 'multiple' ? 'block' : 'none'}">
+              ${choicesHTML}
+            </div>
+            ${shortAnswerHTML}
+            ${oxAnswerHTML}
             <label>풀이/설명:<br><textarea class="explanation-text">${q.explanation || ""}</textarea></label><br>
             <button onclick="deleteQuestion(${i})">🗑️ 이 문제 삭제</button>
           `;
+
+          // 문제 유형 변경 이벤트 리스너 추가
+          const typeSelect = div.querySelector('.question-type');
+          typeSelect.addEventListener('change', function() {
+            const choicesContainer = div.querySelector('.choices-container');
+            const shortAnswerContainer = div.querySelector('.short-answer-container');
+            const oxAnswerContainer = div.querySelector('.ox-answer-container');
+
+            if (this.value === 'multiple') {
+              if (choicesContainer) choicesContainer.style.display = 'block';
+              if (shortAnswerContainer) shortAnswerContainer.style.display = 'none';
+              if (oxAnswerContainer) oxAnswerContainer.style.display = 'none';
+            } else if (this.value === 'short') {
+              if (choicesContainer) choicesContainer.style.display = 'none';
+              if (shortAnswerContainer) shortAnswerContainer.style.display = 'block';
+              if (oxAnswerContainer) oxAnswerContainer.style.display = 'none';
+            } else if (this.value === 'ox') {
+              if (choicesContainer) choicesContainer.style.display = 'none';
+              if (shortAnswerContainer) shortAnswerContainer.style.display = 'none';
+              if (oxAnswerContainer) oxAnswerContainer.style.display = 'block';
+            }
+          });
+
           container.appendChild(div);
         });
       } else {
@@ -114,22 +176,41 @@
       questionBlocks.forEach(block => {
         const question = block.querySelector(".question-text").value.trim();
         const explanation = block.querySelector(".explanation-text").value.trim();
-        const choiceEls = block.querySelectorAll(".choice-text");
-        const correctBoxes = block.querySelectorAll(".correct-checkbox");
+        const questionType = block.querySelector(".question-type").value;
 
-        const choices = [];
-        const correctAnswers = [];
+        if (!question) return;
 
-        choiceEls.forEach((el, i) => {
-          const text = el.value.trim();
-          if (text) {
-            choices.push(text);
-            if (correctBoxes[i].checked) correctAnswers.push(i);
+        if (questionType === 'multiple') {
+          // 객관식 문제
+          const choiceEls = block.querySelectorAll(".choice-text");
+          const correctBoxes = block.querySelectorAll(".correct-checkbox");
+
+          const choices = [];
+          const correctAnswers = [];
+
+          choiceEls.forEach((el, i) => {
+            const text = el.value.trim();
+            if (text) {
+              choices.push(text);
+              if (correctBoxes[i].checked) correctAnswers.push(i);
+            }
+          });
+
+          if (choices.length > 0) {
+            questions.push({ question, choices, correctAnswers, explanation, type: 'multiple' });
           }
-        });
-
-        if (question && choices.length > 0) {
-          questions.push({ question, choices, correctAnswers, explanation });
+        } else if (questionType === 'short') {
+          // 단답형 문제
+          const shortAnswer = block.querySelector(".short-answer").value.trim();
+          if (shortAnswer) {
+            questions.push({ question, answer: shortAnswer, explanation, type: 'short' });
+          }
+        } else if (questionType === 'ox') {
+          // O/X 문제
+          const oxAnswer = block.querySelector(".ox-answer").value;
+          if (oxAnswer) {
+            questions.push({ question, answer: oxAnswer, explanation, type: 'ox' });
+          }
         }
       });
 
