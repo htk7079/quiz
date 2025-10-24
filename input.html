@@ -91,6 +91,18 @@
     div.className = 'question-block';
     div.id = questionId;
 
+    // 문제 유형 선택
+    const questionTypeSelect = `
+      <label>문제 유형:
+        <select class="question-type">
+          <option value="multiple">객관식</option>
+          <option value="short">단답형</option>
+          <option value="ox">O/X</option>
+        </select>
+      </label><br><br>
+    `;
+
+    // 객관식 보기 HTML
     let choicesHTML = '';
     for (let i = 0; i < 4; i++) {
       choicesHTML += `
@@ -102,16 +114,66 @@
       `;
     }
 
+    // 단답형 정답 입력
+    const shortAnswerHTML = `
+      <div class="short-answer-container" style="display: none;">
+        <label>정답: <input type="text" class="short-answer" placeholder="정답을 입력하세요" /></label><br><br>
+      </div>
+    `;
+
+    // O/X 정답 선택
+    const oxAnswerHTML = `
+      <div class="ox-answer-container" style="display: none;">
+        <label>정답:
+          <select class="ox-answer">
+            <option value="">선택하세요</option>
+            <option value="O">O (맞음)</option>
+            <option value="X">X (틀림)</option>
+          </select>
+        </label><br><br>
+      </div>
+    `;
+
     div.innerHTML = `
+      ${questionTypeSelect}
       <label>문제: <br><textarea class="question-text" placeholder="문제를 입력하세요"></textarea></label><br>
       <div class="choices-container">
         ${choicesHTML}
       </div>
-      <button onclick="addChoice('${questionId}')">+ 보기 추가</button><br><br>
+      <button onclick="addChoice('${questionId}')" class="add-choice-btn">+ 보기 추가</button><br><br>
+      ${shortAnswerHTML}
+      ${oxAnswerHTML}
       <label>풀이/설명:<br><textarea class="explanation-text" placeholder="이 문제의 해설을 입력하세요"></textarea></label><br>
       <button onclick="deleteQuestion('${questionId}')">🗑️ 문제 삭제</button>
       <hr>
     `;
+
+    // 문제 유형 변경 이벤트 리스너 추가
+    const typeSelect = div.querySelector('.question-type');
+    typeSelect.addEventListener('change', function() {
+      const choicesContainer = div.querySelector('.choices-container');
+      const addChoiceBtn = div.querySelector('.add-choice-btn');
+      const shortAnswerContainer = div.querySelector('.short-answer-container');
+      const oxAnswerContainer = div.querySelector('.ox-answer-container');
+
+      if (this.value === 'multiple') {
+        choicesContainer.style.display = 'block';
+        addChoiceBtn.style.display = 'inline-block';
+        shortAnswerContainer.style.display = 'none';
+        oxAnswerContainer.style.display = 'none';
+      } else if (this.value === 'short') {
+        choicesContainer.style.display = 'none';
+        addChoiceBtn.style.display = 'none';
+        shortAnswerContainer.style.display = 'block';
+        oxAnswerContainer.style.display = 'none';
+      } else if (this.value === 'ox') {
+        choicesContainer.style.display = 'none';
+        addChoiceBtn.style.display = 'none';
+        shortAnswerContainer.style.display = 'none';
+        oxAnswerContainer.style.display = 'block';
+      }
+    });
+
     container.appendChild(div);
   };
 
@@ -144,24 +206,59 @@
     questionBlocks.forEach(block => {
       const questionText = block.querySelector('.question-text').value.trim();
       const explanation = block.querySelector('.explanation-text').value.trim();
-      const choiceElements = block.querySelectorAll('.choice-text');
-      const correctCheckboxes = block.querySelectorAll('.correct-checkbox');
+      const questionType = block.querySelector('.question-type').value;
 
-      const choices = [];
-      const correctAnswers = [];
+      if (!questionText) return;
 
-      choiceElements.forEach((choiceEl, idx) => {
-        const text = choiceEl.value.trim();
-        if (text) {
-          choices.push(text);
-          if (correctCheckboxes[idx].checked) {
-            correctAnswers.push(idx);
+      if (questionType === 'multiple') {
+        // 객관식 문제
+        const choiceElements = block.querySelectorAll('.choice-text');
+        const correctCheckboxes = block.querySelectorAll('.correct-checkbox');
+
+        const choices = [];
+        const correctAnswers = [];
+
+        choiceElements.forEach((choiceEl, idx) => {
+          const text = choiceEl.value.trim();
+          if (text) {
+            choices.push(text);
+            if (correctCheckboxes[idx].checked) {
+              correctAnswers.push(idx);
+            }
           }
-        }
-      });
+        });
 
-      if (questionText && choices.length > 0) {
-        questions.push({ question: questionText, choices, correctAnswers, explanation });
+        if (choices.length > 0) {
+          questions.push({ 
+            question: questionText, 
+            choices, 
+            correctAnswers, 
+            explanation, 
+            type: 'multiple' 
+          });
+        }
+      } else if (questionType === 'short') {
+        // 단답형 문제
+        const shortAnswer = block.querySelector('.short-answer').value.trim();
+        if (shortAnswer) {
+          questions.push({ 
+            question: questionText, 
+            answer: shortAnswer, 
+            explanation, 
+            type: 'short' 
+          });
+        }
+      } else if (questionType === 'ox') {
+        // O/X 문제
+        const oxAnswer = block.querySelector('.ox-answer').value;
+        if (oxAnswer) {
+          questions.push({ 
+            question: questionText, 
+            answer: oxAnswer, 
+            explanation, 
+            type: 'ox' 
+          });
+        }
       }
     });
 
