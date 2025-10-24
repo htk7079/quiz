@@ -34,6 +34,28 @@
     #type-select-container input {
       margin-right: 5px; /* 체크박스와 레이블 사이 간격 */
     }
+
+    /* 단답형과 O/X 문제 스타일 */
+    .short-answer-input input {
+      width: 200px;
+      padding: 8px;
+      margin-left: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .ox-answer-input {
+      margin-top: 10px;
+    }
+
+    .ox-answer-input label {
+      margin-right: 20px;
+      font-weight: normal;
+    }
+
+    .ox-answer-input input[type="radio"] {
+      margin-right: 5px;
+    }
   </style>
 </head>
 <body>
@@ -113,17 +135,40 @@
       const selectedQuestions = allQuestions.slice(0, count);
 
       quizData = selectedQuestions.map(q => {
-        const indices = q.choices.map((_, i) => i);
-        shuffle(indices);
+        if (q.type === 'multiple') {
+          // 객관식 문제
+          const indices = q.choices.map((_, i) => i);
+          shuffle(indices);
 
-        return {
-          question: q.question,
-          explanation: q.explanation || "",
-          choices: indices.map(i => q.choices[i]),
-          answerIndices: q.correctAnswers.map(i => indices.indexOf(i)),
-          type: q.__type
-        };
-      });
+          return {
+            question: q.question,
+            explanation: q.explanation || "",
+            choices: indices.map(i => q.choices[i]),
+            answerIndices: q.correctAnswers.map(i => indices.indexOf(i)),
+            type: q.__type,
+            questionType: 'multiple'
+          };
+        } else if (q.type === 'short') {
+          // 단답형 문제
+          return {
+            question: q.question,
+            explanation: q.explanation || "",
+            answer: q.answer,
+            type: q.__type,
+            questionType: 'short'
+          };
+        } else if (q.type === 'ox') {
+          // O/X 문제
+          return {
+            question: q.question,
+            explanation: q.explanation || "",
+            answer: q.answer,
+            type: q.__type,
+            questionType: 'ox'
+          };
+        }
+        return null;
+      }).filter(q => q !== null);
 
       renderQuiz();
     };
@@ -143,18 +188,46 @@
         const div = document.createElement("div");
         div.className = "question-block";
         const questionText = q.question.replace(/(?:\r\n|\r|\n)/g, "<br>");
-        div.innerHTML = `<p><strong>${i + 1}. ${questionText}</strong></p>`;
-
-        q.choices.forEach((choice, j) => {
-          div.innerHTML += `
-            <div class="choice-item">
+        
+        if (q.questionType === 'multiple') {
+          // 객관식 문제 렌더링
+          div.innerHTML = `<p><strong>${i + 1}. ${questionText}</strong></p>`;
+          
+          q.choices.forEach((choice, j) => {
+            div.innerHTML += `
+              <div class="choice-item">
+                <label>
+                  <input type="checkbox" name="q${i}" value="${j}">
+                  ${choice}
+                </label>
+              </div>
+            `;
+          });
+        } else if (q.questionType === 'short') {
+          // 단답형 문제 렌더링
+          div.innerHTML = `
+            <p><strong>${i + 1}. ${questionText}</strong></p>
+            <div class="short-answer-input">
+              <label>답: <input type="text" name="q${i}" placeholder="답을 입력하세요" /></label>
+            </div>
+          `;
+        } else if (q.questionType === 'ox') {
+          // O/X 문제 렌더링
+          div.innerHTML = `
+            <p><strong>${i + 1}. ${questionText}</strong></p>
+            <div class="ox-answer-input">
               <label>
-                <input type="checkbox" name="q${i}" value="${j}">
-                ${choice}
+                <input type="radio" name="q${i}" value="O" />
+                O (맞음)
+              </label>
+              <label>
+                <input type="radio" name="q${i}" value="X" />
+                X (틀림)
               </label>
             </div>
           `;
-        });
+        }
+        
         form.appendChild(div);
       });
     }
@@ -163,21 +236,45 @@
       let correctCount = 0;
 
       quizData.forEach((q, i) => {
-        const selected = [...form.querySelectorAll(`input[name="q${i}"]:checked`)].map(input => parseInt(input.value));
         const block = form.children[i];
+        let isCorrect = false;
+        let userAnswer = "";
 
-        const isCorrect = arraysEqual(selected.sort(), q.answerIndices.sort());
+        if (q.questionType === 'multiple') {
+          // 객관식 채점
+          const selected = [...form.querySelectorAll(`input[name="q${i}"]:checked`)].map(input => parseInt(input.value));
+          isCorrect = arraysEqual(selected.sort(), q.answerIndices.sort());
+          userAnswer = selected.map(idx => q.choices[idx]).join(", ");
+        } else if (q.questionType === 'short') {
+          // 단답형 채점
+          const input = form.querySelector(`input[name="q${i}"]`);
+          userAnswer = input.value.trim();
+          isCorrect = userAnswer.toLowerCase() === q.answer.toLowerCase();
+        } else if (q.questionType === 'ox') {
+          // O/X 채점
+          const selected = form.querySelector(`input[name="q${i}"]:checked`);
+          userAnswer = selected ? selected.value : "";
+          isCorrect = userAnswer === q.answer;
+        }
+
         if (isCorrect) {
           correctCount++;
           block.classList.add("correct");
         } else {
           block.classList.add("wrong");
 
-          const correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
+          let correctText = "";
+          if (q.questionType === 'multiple') {
+            correctText = q.answerIndices.map(idx => q.choices[idx]).join(", ");
+          } else {
+            correctText = q.answer;
+          }
+
           const explanationText = q.explanation.replace(/(?:\r\n|\r|\n)/g, "<br>");
           const explanation = `
             <div class="explanation">
               <strong>✅ 정답:</strong> ${correctText}<br>
+              <strong>❌ 내 답:</strong> ${userAnswer || "답안 없음"}<br>
               <strong>🧠 해설:</strong><br>${explanationText}
               <div class="question-meta">[유형: ${q.type}]</div>
             </div>
@@ -185,7 +282,8 @@
           block.insertAdjacentHTML("beforeend", explanation);
         }
 
-        block.querySelectorAll('input[type="checkbox"]').forEach(input => input.disabled = true);
+        // 모든 입력 요소 비활성화
+        block.querySelectorAll('input').forEach(input => input.disabled = true);
       });
 
       const total = quizData.length;
